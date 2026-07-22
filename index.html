@@ -112,8 +112,22 @@
   </div>
 
   <div class="view" id="view-lb">
-    <div class="section-title">Top eagles</div>
+    <div class="section-title">Top 6 eagles</div>
     <div class="lb" id="lbList"></div>
+    <div class="balance" style="margin-top:4px">
+      <div class="lbl">🏆 Season prize ends in</div>
+      <div class="amount" id="seasonCd" style="font-size:26px">--:--:--</div>
+      <div class="rate" style="color:var(--muted)">Whoever is in the top 6 when the timer ends wins TON</div>
+    </div>
+    <div class="lb" style="margin-top:12px">
+      <div class="lb-row"><div class="lb-rank g1">🥇</div><div class="lb-name">1st place</div><div class="lb-score">40 TON</div></div>
+      <div class="lb-row"><div class="lb-rank g2">🥈</div><div class="lb-name">2nd place</div><div class="lb-score">30 TON</div></div>
+      <div class="lb-row"><div class="lb-rank g3">🥉</div><div class="lb-name">3rd place</div><div class="lb-score">30 TON</div></div>
+      <div class="lb-row"><div class="lb-rank">4</div><div class="lb-name">4th place</div><div class="lb-score">20 TON</div></div>
+      <div class="lb-row"><div class="lb-rank">5</div><div class="lb-name">5th place</div><div class="lb-score">20 TON</div></div>
+      <div class="lb-row"><div class="lb-rank">6</div><div class="lb-name">6th place</div><div class="lb-score">15 TON</div></div>
+    </div>
+    <div class="disclaimer">Connect your TON wallet (top right) so you can receive a prize if you finish in the top 6.</div>
   </div>
 
   <div class="view" id="view-earn">
@@ -416,10 +430,34 @@ $("#copyBtn").onclick = async ()=>{
   catch(e){ toast(link); }
 };
 
-/* ---- TON Connect (wallet link only) ---- */
-try{ new TON_CONNECT_UI.TonConnectUI({
-  manifestUrl:"https://illyrianblood3.github.io/eaglecoin/tonconnect-manifest.json",
-  buttonRootId:"tonbtn" }); }catch(e){}
+/* ---- TON Connect — save address so winners can be paid ---- */
+try{
+  const tc = new TON_CONNECT_UI.TonConnectUI({
+    manifestUrl:"https://illyrianblood3.github.io/eaglecoin/tonconnect-manifest.json",
+    buttonRootId:"tonbtn" });
+  tc.onStatusChange(async (w)=>{
+    const addr = w?.account?.address;
+    if(addr){ try{ await api("savewallet",{ wallet: addr }); toast("Wallet connected"); }catch(e){} }
+  });
+}catch(e){}
+
+/* ---- Season prize countdown ---- */
+let seasonEndsAt = 0, seasonTimer = null;
+function startSeasonCountdown(){
+  clearInterval(seasonTimer);
+  const el = $("#seasonCd");
+  const tick=()=>{
+    if(!seasonEndsAt){ el.textContent="--:--:--"; return; }
+    let left = Math.floor((seasonEndsAt - Date.now())/1000);
+    if(left<=0){ el.textContent="Season ended!"; clearInterval(seasonTimer); return; }
+    const d=Math.floor(left/86400); left%=86400;
+    const h=String(Math.floor(left/3600)).padStart(2,"0"); left%=3600;
+    const m=String(Math.floor(left/60)).padStart(2,"0");
+    const s=String(left%60).padStart(2,"0");
+    el.textContent = d>0 ? `${d}d ${h}:${m}:${s}` : `${h}:${m}:${s}`;
+  };
+  tick(); seasonTimer=setInterval(tick,1000);
+}
 
 /* ---- Nav ---- */
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
@@ -442,6 +480,7 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   if(typeof res.totalUsers==="number"){
     $("#userCount").textContent = `👥 ${fmt0(res.totalUsers)} eagles`;
   }
+  if(res.seasonEndsAt){ seasonEndsAt = new Date(res.seasonEndsAt).getTime(); startSeasonCountdown(); }
 
   // resume an in-progress mining session
   const st=await api("mine",{action:"status"});
