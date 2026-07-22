@@ -6,6 +6,7 @@
 <title>Eagle Coin</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
+<script src='//libtl.com/sdk.js' data-zone='11373624' data-sdk='show_11373624'></script>
 <style>
   :root{
     --bg:#0b1220;--panel:#111c31;--panel-2:#0e1728;--line:#20304d;--ink:#e9eef7;
@@ -91,6 +92,10 @@
       <div class="progress" id="progWrap" style="display:none"><div id="progBar"></div></div>
       <div class="progress-txt" id="progTxt" style="display:none"><span id="progLeft"></span><span>24h session</span></div>
       <div class="mine-sub" id="mineSub">Tap to mine. Your session runs for 24 hours, then tap again.</div>
+    </div>
+    <div class="mine-card" style="text-align:center">
+      <button class="btn sec" id="adBtn" style="width:100%">📺 Watch ad → +20 EAGLE</button>
+      <div class="mine-sub" id="adSub">Free bonus. Watch a short ad to earn EAGLE.</div>
     </div>
     <div class="section-title">Daily bonus</div>
     <div class="mine-card" style="text-align:left">
@@ -326,6 +331,26 @@ async function buy(id){
   player=res.player; toast("Miner bought!"); render();
   // if mining, the live rate updates automatically on next tick
 }
+
+/* ---- Rewarded ad (Monetag) ---- */
+$("#adBtn").onclick = async ()=>{
+  const btn=$("#adBtn");
+  btn.disabled=true; btn.textContent="Loading ad…";
+  try{
+    // Monetag SDK exposes show_11373624() which resolves after the ad is watched
+    if(typeof window.show_11373624 !== "function"){
+      toast("Ad not ready, try again"); btn.disabled=false; btn.textContent="📺 Watch ad → +20 EAGLE"; return;
+    }
+    await window.show_11373624();
+    // ad watched — credit server-side
+    const res=await api("adreward",{});
+    if(res.error){ toast(res.error); }
+    else { player=res.player; toast(`+${res.reward} EAGLE!`); render(); }
+  }catch(e){
+    toast("Ad closed early");
+  }
+  btn.disabled=false; btn.textContent="📺 Watch ad → +20 EAGLE";
+};
 
 /* ---- Referral invite link ---- */
 function inviteLink(){
