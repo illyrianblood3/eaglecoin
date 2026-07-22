@@ -74,7 +74,7 @@
 <div class="loading" id="loading">Connecting…</div>
 <div class="wrap">
   <div class="top">
-    <div class="brand"><div class="crest">🦅</div><div><h1>Eagle Coin</h1><span>Shqipëria</span></div></div>
+    <div class="brand"><div class="crest">🦅</div><div><h1>Eagle Coin</h1><span id="userCount">Shqipëria</span></div></div>
     <div id="tonbtn"></div>
   </div>
 
@@ -322,6 +322,9 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   const res=await api("verify",{});
   if(res.error){ $("#loading").textContent="Sign-in failed: "+res.error; return; }
   player=res.player; lbCache=res.leaderboard||[];
+  if(typeof res.totalUsers==="number"){
+    $("#userCount").textContent = `👥 ${fmt0(res.totalUsers)} eagles`;
+  }
 
   // resume an in-progress mining session
   const st=await api("mine",{action:"status"});
