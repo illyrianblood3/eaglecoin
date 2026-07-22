@@ -90,8 +90,8 @@
       <button class="btn" id="mineBtn">Start mining</button>
       <div class="live-earn" id="liveEarn"></div>
       <div class="progress" id="progWrap" style="display:none"><div id="progBar"></div></div>
-      <div class="progress-txt" id="progTxt" style="display:none"><span id="progLeft"></span><span>24h session</span></div>
-      <div class="mine-sub" id="mineSub">Tap to mine. Your session runs for 24 hours, then tap again.</div>
+      <div class="progress-txt" id="progTxt" style="display:none"><span id="progLeft"></span><span>6h session</span></div>
+      <div class="mine-sub" id="mineSub">Tap to mine. Your session runs for 6 hours, then tap again.</div>
     </div>
     <div class="section-title">Daily bonus</div>
     <div class="mine-card" style="text-align:left">
@@ -103,7 +103,6 @@
         <button class="btn sec" id="checkinBtn" style="width:auto;padding:11px 18px">Claim</button>
       </div>
     </div>
-    <div class="disclaimer">EAGLE are in-game points. Miners are bought with EAGLE, not money.</div>
   </div>
 
   <div class="view" id="view-workers">
@@ -158,7 +157,7 @@ const BOT_USERNAME = "eaglecoin_bot";  // your bot's @username, no @
 /* ========================================================================= */
 
 const BASE_RATE = 0.0005;            // must match server
-const SESSION_SECONDS = 24 * 3600;   // 24h
+const SESSION_SECONDS = 6 * 3600;   // 6h
 const BOOST = { drone:1, engineer:3, rig:8, hangar:25 };
 const WORKER_META = [
   { id:"drone",    name:"Recon Drone", icon:"🛩️", boost:1,  baseCost:25 },
@@ -230,7 +229,7 @@ function renderLeaderboard(){
   const meName = player.username || player.first_name || "You";
   if(!rows.some(r=>r.username && r.username===player.username)) rows.push({name:meName,username:player.username,balance:player.balance});
   rows.sort((a,b)=>Number(b.balance)-Number(a.balance));
-  rows.slice(0,20).forEach((r,i)=>{
+  rows.slice(0,6).forEach((r,i)=>{
     const rank=i+1, gc=rank<=3?`g${rank}`:"";
     const me=(r.username && r.username===player.username);
     const row=document.createElement("div"); row.className="lb-row"+(me?" me":"");
@@ -248,7 +247,7 @@ function enterMiningUI(){
   $("#mineBtn").disabled=true;
   $("#mineBtn").textContent="Mining…";
   $("#progWrap").style.display="block"; $("#progTxt").style.display="flex";
-  $("#mineSub").textContent="Mining automatically for 24h. Come back after to mine again.";
+  $("#mineSub").textContent="Mining automatically for 6h. Come back after to mine again.";
   clearInterval(liveTimer);
   liveTimer=setInterval(updateMiningTick,200);
   updateMiningTick();
