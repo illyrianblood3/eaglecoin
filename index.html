@@ -93,10 +93,6 @@
       <div class="progress-txt" id="progTxt" style="display:none"><span id="progLeft"></span><span>24h session</span></div>
       <div class="mine-sub" id="mineSub">Tap to mine. Your session runs for 24 hours, then tap again.</div>
     </div>
-    <div class="mine-card" style="text-align:center">
-      <button class="btn sec" id="adBtn" style="width:100%">📺 Watch ad → +20 EAGLE</button>
-      <div class="mine-sub" id="adSub">Free bonus. Watch a short ad to earn EAGLE.</div>
-    </div>
     <div class="section-title">Daily bonus</div>
     <div class="mine-card" style="text-align:left">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -121,6 +117,12 @@
     <div class="lb" id="lbList"></div>
   </div>
 
+  <div class="view" id="view-earn">
+    <div class="section-title">Watch ads, earn EAGLE</div>
+    <div class="workers" id="adTierList"></div>
+    <div class="disclaimer">Watch short ads to earn free EAGLE. Each reward can be claimed once every 3 hours.</div>
+  </div>
+
   <div class="view" id="view-friends">
     <div class="section-title">Invite friends</div>
     <div class="balance" style="margin-bottom:14px">
@@ -143,6 +145,7 @@
 <div class="nav">
   <button class="active" data-v="mine"><span class="ni">⛏️</span>Mine</button>
   <button data-v="workers"><span class="ni">👷</span>Miners</button>
+  <button data-v="earn"><span class="ni">📺</span>Earn</button>
   <button data-v="friends"><span class="ni">👥</span>Friends</button>
   <button data-v="lb"><span class="ni">🏆</span>Ranks</button>
 </div>
@@ -201,7 +204,7 @@ function render(){
   $("#streakTxt").textContent = `Day ${day} · +${bonusForDay(day)} EAGLE`;
   $("#refEarn").textContent = fmt0(player.referral_earnings || 0);
   $("#refCount").textContent = fmt0(player.referral_count || 0);
-  renderWorkers(); renderLeaderboard();
+  renderWorkers(); renderLeaderboard(); renderAdTiers();
 }
 
 function renderWorkers(){
@@ -332,25 +335,69 @@ async function buy(id){
   // if mining, the live rate updates automatically on next tick
 }
 
-/* ---- Rewarded ad (Monetag) ---- */
-$("#adBtn").onclick = async ()=>{
-  const btn=$("#adBtn");
-  btn.disabled=true; btn.textContent="Loading ad…";
-  try{
-    // Monetag SDK exposes show_11373624() which resolves after the ad is watched
-    if(typeof window.show_11373624 !== "function"){
-      toast("Ad not ready, try again"); btn.disabled=false; btn.textContent="📺 Watch ad → +20 EAGLE"; return;
+/* ---- Rewarded ads (Monetag) — 3 tiers ---- */
+const AD_TIERS = [
+  { tier:1, ads:1, reward:20,  label:"Watch 1 ad" },
+  { tier:2, ads:2, reward:50,  label:"Watch 2 ads" },
+  { tier:3, ads:3, reward:100, label:"Watch 3 ads" },
+];
+const adNextAt = { 1:0, 2:0, 3:0 };  // cooldown end times (ms)
+
+function renderAdTiers(){
+  const el=$("#adTierList"); if(!el) return;
+  el.innerHTML="";
+  for(const t of AD_TIERS){
+    const now=Date.now();
+    const locked = adNextAt[t.tier] > now;
+    const row=document.createElement("div"); row.className="worker";
+    let btnLabel = `+${t.reward} 🦅`;
+    if(locked){
+      const left=Math.ceil((adNextAt[t.tier]-now)/1000);
+      const h=Math.floor(left/3600), m=Math.floor(left%3600/60);
+      btnLabel = h>0?`${h}h ${m}m`:`${m}m`;
     }
-    await window.show_11373624();
-    // ad watched — credit server-side
-    const res=await api("adreward",{});
-    if(res.error){ toast(res.error); }
-    else { player=res.player; toast(`+${res.reward} EAGLE!`); render(); }
-  }catch(e){
-    toast("Ad closed early");
+    row.innerHTML=`<div class="ic">📺</div>
+      <div class="info"><b>${t.label}</b>
+      <p>Earn ${t.reward} EAGLE ${locked?'<span class="owned">· on cooldown</span>':''}</p></div>
+      <button ${locked?"disabled":""} data-tier="${t.tier}">${btnLabel}</button>`;
+    el.appendChild(row);
   }
-  btn.disabled=false; btn.textContent="📺 Watch ad → +20 EAGLE";
-};
+  el.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>watchTier(Number(b.dataset.tier)));
+}
+
+async function watchTier(tier){
+  const meta=AD_TIERS.find(x=>x.tier===tier);
+  if(!meta) return;
+  if(adNextAt[tier] > Date.now()){ toast("Still on cooldown"); return; }
+  if(typeof window.show_11373624 !== "function"){ toast("Ads not ready yet"); return; }
+
+  const btn=document.querySelector(`[data-tier="${tier}"]`);
+  try{
+    // play the required number of ads in sequence
+    for(let i=0;i<meta.ads;i++){
+      if(btn){ btn.disabled=true; btn.textContent = meta.ads>1 ? `Ad ${i+1}/${meta.ads}…` : "Loading…"; }
+      await window.show_11373624();
+    }
+    // all ads watched — claim server-side
+    if(btn) btn.textContent="Claiming…";
+    const res=await api("adreward",{ tier });
+    if(res.error){
+      if(res.nextAt) adNextAt[tier]=res.nextAt;
+      toast(res.error==="cooldown" ? "On cooldown" : res.error);
+    } else {
+      player=res.player;
+      adNextAt[tier]=res.nextAt;
+      toast(`+${res.reward} EAGLE!`);
+      render();
+    }
+  }catch(e){
+    toast("Ad closed early — no reward");
+  }
+  renderAdTiers();
+}
+
+// tick the cooldown labels every second while on the Earn tab
+setInterval(()=>{ if($("#view-earn")?.classList.contains("active")) renderAdTiers(); }, 1000);
 
 /* ---- Referral invite link ---- */
 function inviteLink(){
@@ -388,6 +435,11 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   const res=await api("verify",{startParam});
   if(res.error){ $("#loading").textContent="Sign-in failed: "+res.error; return; }
   player=res.player; lbCache=res.leaderboard||[];
+  // restore ad cooldowns from saved timestamps
+  const COOLDOWN=3*3600*1000;
+  if(player.ad_tier1_at) adNextAt[1]=new Date(player.ad_tier1_at).getTime()+COOLDOWN;
+  if(player.ad_tier2_at) adNextAt[2]=new Date(player.ad_tier2_at).getTime()+COOLDOWN;
+  if(player.ad_tier3_at) adNextAt[3]=new Date(player.ad_tier3_at).getTime()+COOLDOWN;
   if(typeof res.totalUsers==="number"){
     $("#userCount").textContent = `👥 ${fmt0(res.totalUsers)} eagles`;
   }
