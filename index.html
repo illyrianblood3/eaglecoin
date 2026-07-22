@@ -210,54 +210,62 @@ function renderLeaderboard(){
   });
 }
 
-/* ---- Mining: 24h session, live accrual, resync on open ---- */
+/* ---- Mining: tap once, auto-mines 24h, auto-banks, then Start returns ---- */
+let claiming=false;
 function enterMiningUI(){
   $("#orb").classList.add("live");
-  $("#mineBtn").textContent="Claim now";
+  $("#mineBtn").disabled=true;
+  $("#mineBtn").textContent="Mining…";
   $("#progWrap").style.display="block"; $("#progTxt").style.display="flex";
-  $("#mineSub").textContent="Mining… fills over 24h. Come back to claim & restart.";
+  $("#mineSub").textContent="Mining automatically for 24h. Come back after to mine again.";
   clearInterval(liveTimer);
   liveTimer=setInterval(updateMiningTick,200);
   updateMiningTick();
 }
 function exitMiningUI(){
   $("#orb").classList.remove("live");
+  $("#mineBtn").disabled=false;
   $("#mineBtn").textContent="Start mining";
   $("#liveEarn").textContent="";
   $("#progWrap").style.display="none"; $("#progTxt").style.display="none";
   clearInterval(liveTimer); liveTimer=null; mineStart=0;
 }
+async function autoClaim(){
+  if(claiming) return;
+  claiming=true;
+  const res=await api("mine",{action:"claim"});
+  claiming=false;
+  if(res.error){ return; }
+  player=res.player; exitMiningUI();
+  $("#mineSub").textContent=`Session done — earned ${fmt6(res.gained)} EAGLE. Tap to mine again.`;
+  toast(`+${fmt6(res.gained)} EAGLE mined`);
+  render();
+}
 function updateMiningTick(){
   let secs=(Date.now()-mineStart)/1000;
   if(secs>SESSION_SECONDS) secs=SESSION_SECONDS;
   const est=secs*ratePerSec();
-  $("#liveEarn").textContent=`+${fmt6(est)} this session`;
+  $("#liveEarn").textContent=`+${fmt6(est)} so far`;
   $("#bal").textContent=fmt6(Number(player.balance)+est);
   const pct=Math.min(100,(secs/SESSION_SECONDS)*100);
   $("#progBar").style.width=pct+"%";
   const leftSec=Math.max(0,SESSION_SECONDS-secs);
-  const h=Math.floor(leftSec/3600), m=Math.floor(leftSec%3600/60);
+  const h=Math.floor(leftSec/3600), m=Math.floor(leftSec%3600/60), s=Math.floor(leftSec%60);
   if(secs>=SESSION_SECONDS){
-    $("#progLeft").textContent="Session full — claim it!";
-    $("#mineSub").textContent="24h reached. Claim to bank it, then tap to mine again.";
+    // 24h complete — bank it automatically and reset to Start
+    $("#progLeft").textContent="Session complete";
+    autoClaim();
   } else {
-    $("#progLeft").textContent=`${h}h ${m}m of mining left`;
+    $("#progLeft").textContent=`${h}h ${m}m ${s}s of mining left`;
   }
 }
 
 $("#mineBtn").onclick = async ()=>{
-  if(!mineStart){
-    const res = await api("mine",{action:"start"});
-    if(res.error){ toast(res.error); return; }
-    mineStart=res.startedAt; enterMiningUI();
-  } else {
-    const res=await api("mine",{action:"claim"});
-    if(res.error){ toast(res.error); return; }
-    player=res.player; exitMiningUI();
-    $("#mineSub").textContent=`Claimed ${fmt6(res.gained)} EAGLE. Tap to mine again.`;
-    toast(`+${fmt6(res.gained)} EAGLE`);
-    render();
-  }
+  if(mineStart) return; // already mining, button is disabled anyway
+  const res = await api("mine",{action:"start"});
+  if(res.error){ toast(res.error); return; }
+  mineStart=res.startedAt; enterMiningUI();
+  toast("Mining started!");
 };
 
 /* ---- Daily bonus countdown ---- */
