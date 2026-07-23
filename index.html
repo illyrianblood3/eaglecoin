@@ -69,6 +69,30 @@
   .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);color:var(--ink);padding:10px 18px;border-radius:20px;font-size:13px;z-index:60;opacity:0;transition:opacity .3s}
   .toast.show{opacity:1}
   .loading{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:100;color:var(--muted);font-size:14px;text-align:center;padding:24px}
+
+  /* ---- pickaxe tiers ---- */
+  .pick-card{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;
+    background:var(--panel);position:relative;overflow:hidden}
+  .pick-card.t-silver{border-color:#9fb3c8;background:linear-gradient(160deg,#16203200,#1a2740)}
+  .pick-card.t-gold{border-color:#e9b949;background:linear-gradient(160deg,#1d1a0e00,#241f10)}
+  .pick-card.t-platinum{border-color:#7fe3e0;background:linear-gradient(160deg,#0e222400,#10262a)}
+  .pick-card.t-diamond{border-color:#b98cff;background:linear-gradient(160deg,#1a102c00,#1e1235)}
+  .pick-card.owned{box-shadow:0 0 0 2px var(--gold) inset}
+  .pick-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .pick-art{width:56px;height:56px;flex:none;display:grid;place-items:center}
+  .pick-meta b{font-size:16px;display:block}
+  .pick-meta p{font-size:12px;color:var(--muted);margin-top:2px}
+  .pick-stats{display:flex;gap:8px;margin:10px 0}
+  .pick-stat{flex:1;background:rgba(255,255,255,.04);border-radius:8px;padding:8px;text-align:center}
+  .pick-stat span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .pick-stat b{font-size:15px;color:var(--gold)}
+  .pick-buy{display:flex;gap:8px}
+  .pick-buy button{flex:1;border:none;border-radius:10px;padding:11px;font-weight:600;font-size:13px;cursor:pointer}
+  .buy30{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
+  .buylife{background:linear-gradient(90deg,var(--gold-2),var(--gold));color:#1a1206}
+  .pick-owned-tag{font-size:11px;color:var(--gold);font-weight:600;text-align:center;padding:10px}
+  @keyframes shimmer{0%,100%{opacity:.5}50%{opacity:1}}
+  .t-gold .pick-art,.t-platinum .pick-art,.t-diamond .pick-art{animation:shimmer 2.5s ease-in-out infinite}
 </style>
 </head>
 <body>
@@ -86,7 +110,7 @@
       <div class="rate">▲ <span id="rate">0.0005</span> / sec · <span id="wcount">0</span> miners</div>
     </div>
     <div class="mine-card">
-      <div class="orb" id="orb"><div class="ring"></div>⛏️</div>
+      <div class="orb" id="orb"><div class="ring"></div><div id="orbArt">⛏️</div></div>
       <button class="btn" id="mineBtn">Start mining</button>
       <div class="live-earn" id="liveEarn"></div>
       <div class="progress" id="progWrap" style="display:none"><div id="progBar"></div></div>
@@ -130,6 +154,17 @@
     <div class="disclaimer">Connect your TON wallet (top right) so you can receive a prize if you finish in the top 6.</div>
   </div>
 
+  <div class="view" id="view-admin">
+    <div class="section-title">Admin panel</div>
+    <div id="adminBody"><div class="mine-card">Loading…</div></div>
+  </div>
+
+  <div class="view" id="view-shop">
+    <div class="section-title">Pickaxe upgrades</div>
+    <div id="pickList"></div>
+    <div class="disclaimer">Upgrades boost your mining rate and session length. Paid with Telegram Stars.</div>
+  </div>
+
   <div class="view" id="view-earn">
     <div class="section-title">Watch ads, earn EAGLE</div>
     <div class="workers" id="adTierList"></div>
@@ -158,9 +193,11 @@
 <div class="nav">
   <button class="active" data-v="mine"><span class="ni">⛏️</span>Mine</button>
   <button data-v="workers"><span class="ni">👷</span>Miners</button>
+  <button data-v="shop"><span class="ni">⛏️</span>Shop</button>
   <button data-v="earn"><span class="ni">📺</span>Earn</button>
   <button data-v="friends"><span class="ni">👥</span>Friends</button>
   <button data-v="lb"><span class="ni">🏆</span>Ranks</button>
+  <button data-v="admin" id="adminNav" style="display:none"><span class="ni">🛠️</span>Admin</button>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -171,7 +208,7 @@ const BOT_USERNAME = "eaglecoin_bot";  // your bot's @username, no @
 /* ========================================================================= */
 
 const BASE_RATE = 0.0005;            // must match server
-const SESSION_SECONDS = 6 * 3600;   // 6h
+let SESSION_SECONDS = 6 * 3600;   // updated from server per pickaxe tier
 const BOOST = { drone:1, engineer:3, rig:8, hangar:25 };
 const WORKER_META = [
   { id:"drone",    name:"Recon Drone", icon:"🛩️", boost:1,  baseCost:25 },
@@ -191,6 +228,7 @@ const fmt0 = n => Math.floor(Number(n)).toLocaleString("en-US");
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);if(tg?.HapticFeedback)tg.HapticFeedback.impactOccurred("light");}
 
 let player = null;
+let tiers = [];
 let mineStart = 0;     // ms timestamp when the current session started (0 = not mining)
 let liveTimer = null;
 let checkinNextAt = 0, cdTimer = null;
@@ -204,7 +242,11 @@ async function api(path, body){
 }
 
 function multiplier(w){ let m=1; for(const k in BOOST) m += (Number(w[k])||0)*BOOST[k]; return m; }
-function ratePerSec(){ return BASE_RATE * multiplier(player.workers); }
+function tierMult(){
+  const t = tiers.find(x=>x.id === (player.pickaxe||"regular"));
+  return t ? Number(t.rate_mult) : 1;
+}
+function ratePerSec(){ return BASE_RATE * multiplier(player.workers) * tierMult(); }
 function totalWorkers(){ return Object.values(player.workers).reduce((a,b)=>a+Number(b),0); }
 
 function bonusForDay(day){ return Math.round(5 * Math.pow(1.5, day-1)); }
@@ -217,7 +259,7 @@ function render(){
   $("#streakTxt").textContent = `Day ${day} · +${bonusForDay(day)} EAGLE`;
   $("#refEarn").textContent = fmt0(player.referral_earnings || 0);
   $("#refCount").textContent = fmt0(player.referral_count || 0);
-  renderWorkers(); renderLeaderboard(); renderAdTiers();
+  renderWorkers(); renderLeaderboard(); renderAdTiers(); renderShop(); renderOrbArt();
 }
 
 function renderWorkers(){
@@ -239,13 +281,23 @@ function renderWorkers(){
 let lbCache = [];
 function renderLeaderboard(){
   const el=$("#lbList"); el.innerHTML="";
-  const rows=[...lbCache];
+  const myId = player.tg_id ?? tg?.initDataUnsafe?.user?.id;
+  // dedupe by tg_id (usernames can be null, which caused duplicate rows)
+  const seen = new Set();
+  const rows = [];
+  for(const r of lbCache){
+    const key = r.tg_id ?? `${r.name}|${r.balance}`;
+    if(seen.has(key)) continue;
+    seen.add(key); rows.push(r);
+  }
   const meName = player.username || player.first_name || "You";
-  if(!rows.some(r=>r.username && r.username===player.username)) rows.push({name:meName,username:player.username,balance:player.balance});
+  if(!rows.some(r=>r.tg_id && myId && Number(r.tg_id)===Number(myId))){
+    rows.push({tg_id:myId, name:meName, username:player.username, balance:player.balance});
+  }
   rows.sort((a,b)=>Number(b.balance)-Number(a.balance));
   rows.slice(0,6).forEach((r,i)=>{
     const rank=i+1, gc=rank<=3?`g${rank}`:"";
-    const me=(r.username && r.username===player.username);
+    const me = r.tg_id && myId && Number(r.tg_id)===Number(myId);
     const row=document.createElement("div"); row.className="lb-row"+(me?" me":"");
     row.innerHTML=`<div class="lb-rank ${gc}">${rank<=3?["🥇","🥈","🥉"][rank-1]:rank}</div>
       <div class="lb-name">${r.name}${r.username?`<small>@${r.username}</small>`:""}</div>
@@ -308,6 +360,7 @@ $("#mineBtn").onclick = async ()=>{
   if(mineStart) return; // already mining, button is disabled anyway
   const res = await api("mine",{action:"start"});
   if(res.error){ toast(res.error); return; }
+  if(res.sessionSeconds) SESSION_SECONDS=res.sessionSeconds;
   mineStart=res.startedAt; enterMiningUI();
   toast("Mining started!");
 };
@@ -346,6 +399,148 @@ async function buy(id){
   if(res.error){ toast(res.error); return; }
   player=res.player; toast("Miner bought!"); render();
   // if mining, the live rate updates automatically on next tick
+}
+
+/* ---- Admin panel ---- */
+async function loadAdmin(){
+  const box=$("#adminBody");
+  const res=await api("adminstats",{});
+  if(res.error){
+    if(res.yourId){
+      box.innerHTML=`<div class="mine-card" style="text-align:left">
+        <b style="font-size:15px">Not an admin yet</b>
+        <p style="font-size:12px;color:var(--muted);margin:10px 0">Your Telegram ID is:</p>
+        <div class="amount" style="font-size:24px">${res.yourId}</div>
+        <p style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.6">
+          Run this in Supabase SQL Editor to grant yourself access:<br>
+          <code style="color:var(--gold);font-size:11px">update app_config set value = '${res.yourId}' where key = 'admin_ids';</code>
+        </p></div>`;
+    } else { box.innerHTML=`<div class="mine-card">${res.error}</div>`; }
+    return;
+  }
+  const s=res.stats;
+  let html=`<div class="lb" style="margin-bottom:14px">
+    <div class="lb-row"><div class="lb-name">Total users</div><div class="lb-score">${fmt0(s.totalUsers)}</div></div>
+    <div class="lb-row"><div class="lb-name">New today</div><div class="lb-score">${fmt0(s.newToday)}</div></div>
+    <div class="lb-row"><div class="lb-name">Currently mining</div><div class="lb-score">${fmt0(s.mining)}</div></div>
+    <div class="lb-row"><div class="lb-name">Wallets connected</div><div class="lb-score">${fmt0(s.withWallet)}</div></div>
+    <div class="lb-row"><div class="lb-name">Stars earned</div><div class="lb-score">⭐ ${fmt0(s.totalStars)}</div></div>
+    <div class="lb-row"><div class="lb-name">Purchases</div><div class="lb-score">${fmt0(s.purchaseCount)}</div></div>
+  </div>
+  <div class="section-title">All players (${res.players.length})</div>
+  <div class="lb">`;
+  res.players.forEach((p,i)=>{
+    const name = p.username ? "@"+p.username : (p.first_name || "Player");
+    const w = p.ton_wallet ? `<small style="color:var(--ok)">${p.ton_wallet.slice(0,10)}…${p.ton_wallet.slice(-4)}</small>` : `<small>no wallet</small>`;
+    html+=`<div class="lb-row">
+      <div class="lb-rank">${i+1}</div>
+      <div class="lb-name">${name}${w}<small>${p.pickaxe||"regular"} · ${p.referral_count||0} refs</small></div>
+      <div class="lb-score">${fmt0(p.balance)}</div>
+    </div>`;
+  });
+  html+=`</div><div class="disclaimer">Tap a wallet to copy it, then send prizes from your own TON wallet.</div>`;
+  box.innerHTML=html;
+  // make wallets copyable (only the player list, which is the 2nd .lb block)
+  const lists = box.querySelectorAll(".lb");
+  const playerList = lists[lists.length-1];
+  playerList?.querySelectorAll(".lb-row").forEach((row,i)=>{
+    const p=res.players[i];
+    row.onclick=()=>{ if(p?.ton_wallet){ navigator.clipboard?.writeText(p.ton_wallet); toast("Wallet copied"); } };
+  });
+}
+
+/* ---- Orb art reflects the owned pickaxe ---- */
+function renderOrbArt(){
+  const el=$("#orbArt"); if(!el) return;
+  const tier = player.pickaxe || "regular";
+  el.innerHTML = pickaxeSVG(tier, 62);
+  const glow = { regular:"var(--line)", silver:"#9fb3c8", gold:"#e9b949",
+                 platinum:"#7fe3e0", diamond:"#b98cff" }[tier] || "var(--line)";
+  const orb=$("#orb");
+  if(orb && !orb.classList.contains("live")) orb.style.borderColor = glow;
+}
+
+/* ---- Pickaxe SVG art per tier ---- */
+function pickaxeSVG(tier, size){
+  size = size || 56;
+  const PAL = {
+    regular:  { head:"#8b95a5", head2:"#5f6875", handle:"#6b4b2f", glow:"none" },
+    silver:   { head:"#dfe9f3", head2:"#9fb3c8", handle:"#4a5568", glow:"#cfe3ff" },
+    gold:     { head:"#f7d271", head2:"#c9922a", handle:"#5a4520", glow:"#ffd77a" },
+    platinum: { head:"#ffffff", head2:"#7fe3e0", handle:"#2b4a4d", glow:"#7fe3e0" },
+    diamond:  { head:"#e9d5ff", head2:"#b98cff", handle:"#3a2a55", glow:"#c9a3ff" },
+  };
+  const P = PAL[tier] || PAL.regular;
+  const gid = "g_"+tier+"_"+Math.random().toString(36).slice(2,7);
+  const glow = P.glow!=="none"
+    ? `<filter id="f${gid}"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` : "";
+  const filterAttr = P.glow!=="none" ? `filter="url(#f${gid})"` : "";
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${P.head}"/><stop offset="100%" stop-color="${P.head2}"/>
+      </linearGradient>${glow}
+    </defs>
+    <rect x="29" y="24" width="6" height="34" rx="3" fill="${P.handle}"/>
+    <g ${filterAttr}>
+      <path d="M8 22 C18 10, 46 10, 56 22 C46 18, 18 18, 8 22 Z" fill="url(#${gid})"/>
+      <path d="M8 22 C18 26, 46 26, 56 22 C46 30, 18 30, 8 22 Z" fill="url(#${gid})" opacity=".85"/>
+      <rect x="27" y="18" width="10" height="10" rx="2" fill="${P.head2}"/>
+    </g>
+  </svg>`;
+}
+
+/* ---- Pickaxe shop ---- */
+function renderShop(){
+  const el=$("#pickList"); if(!el) return;
+  el.innerHTML="";
+  const current = player.pickaxe || "regular";
+  for(const t of tiers){
+    const owned = current === t.id;
+    const free = !t.stars_30d && !t.stars_life;
+    const card=document.createElement("div");
+    card.className=`pick-card t-${t.id}${owned?" owned":""}`;
+    let buyRow = "";
+    if(owned){
+      const exp = player.pickaxe_expires_at
+        ? `Active until ${new Date(player.pickaxe_expires_at).toLocaleDateString()}`
+        : (free ? "Your default pickaxe" : "Active — lifetime");
+      buyRow = `<div class="pick-owned-tag">✓ ${exp}</div>`;
+    } else if(!free){
+      buyRow = `<div class="pick-buy">
+        <button class="buy30" data-tier="${t.id}" data-dur="30d">⭐ ${t.stars_30d} · 30d</button>
+        <button class="buylife" data-tier="${t.id}" data-dur="lifetime">⭐ ${t.stars_life} · Lifetime</button>
+      </div>`;
+    }
+    card.innerHTML=`
+      <div class="pick-head">
+        <div class="pick-art">${pickaxeSVG(t.id)}</div>
+        <div class="pick-meta"><b>${t.name}</b><p>${free?"Free starter pickaxe":"Premium upgrade"}</p></div>
+      </div>
+      <div class="pick-stats">
+        <div class="pick-stat"><span>Rate</span><b>${Number(t.rate_mult)}×</b></div>
+        <div class="pick-stat"><span>Session</span><b>${Number(t.session_hours)}h</b></div>
+      </div>
+      ${buyRow}`;
+    el.appendChild(card);
+  }
+  el.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>buyPickaxe(b.dataset.tier,b.dataset.dur));
+}
+
+async function buyPickaxe(tier, duration){
+  toast("Opening payment…");
+  const res = await api("buystars",{ tier, duration });
+  if(res.error){ toast(res.error); return; }
+  if(tg?.openInvoice){
+    tg.openInvoice(res.link, (status)=>{
+      if(status === "paid"){
+        toast("Payment received! Reloading…");
+        setTimeout(()=>location.reload(), 1500);
+      } else if(status === "failed"){ toast("Payment failed"); }
+    });
+  } else {
+    window.open(res.link, "_blank");
+  }
 }
 
 /* ---- Rewarded ads (Monetag) — 3 tiers ---- */
@@ -464,14 +659,38 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   b.classList.add("active"); $("#view-"+b.dataset.v).classList.add("active");
+  if(b.dataset.v==="admin") loadAdmin();
 });
+
+/* reveal the Admin tab: long-press (or 5 quick taps) on the eagle logo */
+(function(){
+  const crest=document.querySelector(".crest"); if(!crest) return;
+  let taps=0, timer=null;
+  crest.onclick=()=>{
+    taps++; clearTimeout(timer);
+    timer=setTimeout(()=>{taps=0;},1500);
+    if(taps>=5){ taps=0; $("#adminNav").style.display="flex"; toast("Admin unlocked"); }
+  };
+})();
 
 /* ---- Boot ---- */
 (async ()=>{
   if(!initData){ $("#loading").textContent="Open this inside Telegram to play."; return; }
   const res=await api("verify",{startParam});
   if(res.error){ $("#loading").textContent="Sign-in failed: "+res.error; return; }
-  player=res.player; lbCache=res.leaderboard||[];
+  player=res.player; lbCache=res.leaderboard||[]; tiers=res.tiers||[];
+  // refresh leaderboard + player state every 60s so ranks stay live
+  setInterval(async ()=>{
+    try{
+      const r = await api("verify",{});
+      if(!r.error){
+        lbCache = r.leaderboard || lbCache;
+        if(r.player) player = r.player;
+        if(r.tiers?.length) tiers = r.tiers;
+        renderLeaderboard();
+      }
+    }catch(e){}
+  }, 60000);
   // restore ad cooldowns from saved timestamps
   const COOLDOWN=3*3600*1000;
   if(player.ad_tier1_at) adNextAt[1]=new Date(player.ad_tier1_at).getTime()+COOLDOWN;
@@ -484,9 +703,8 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
 
   // resume an in-progress mining session
   const st=await api("mine",{action:"status"});
-  if(st.ok && st.mining && st.startedAt){
-    mineStart=st.startedAt; enterMiningUI();
-  }
+  if(st.ok){ if(st.sessionSeconds) SESSION_SECONDS=st.sessionSeconds;
+    if(st.mining && st.startedAt){ mineStart=st.startedAt; enterMiningUI(); } }
 
   // daily bonus countdown
   if(player.last_checkin){
