@@ -402,6 +402,11 @@ async function buy(id){
 }
 
 /* ---- Admin panel ---- */
+/* ====================================================================
+   EDIT 1 — replace your existing loadAdmin() with everything below,
+   down to (and including) the loadSeasonPreview / endSeason helpers.
+   ==================================================================== */
+
 async function loadAdmin(){
   const box=$("#adminBody");
   const res=await api("adminstats",{});
@@ -419,7 +424,16 @@ async function loadAdmin(){
     return;
   }
   const s=res.stats;
-  let html=`<div class="lb" style="margin-bottom:14px">
+  let html=`
+  <!-- SEASON CONTROL -->
+  <div class="mine-card" style="text-align:left;border-color:var(--gold)">
+    <b style="font-size:15px">🏆 Season control</b>
+    <div id="seasonPanel" style="margin-top:10px">
+      <p style="font-size:12px;color:var(--muted)">Loading current standings…</p>
+    </div>
+  </div>
+
+  <div class="lb" style="margin-bottom:14px">
     <div class="lb-row"><div class="lb-name">Total users</div><div class="lb-score">${fmt0(s.totalUsers)}</div></div>
     <div class="lb-row"><div class="lb-name">New today</div><div class="lb-score">${fmt0(s.newToday)}</div></div>
     <div class="lb-row"><div class="lb-name">Currently mining</div><div class="lb-score">${fmt0(s.mining)}</div></div>
@@ -440,13 +454,122 @@ async function loadAdmin(){
   });
   html+=`</div><div class="disclaimer">Tap a wallet to copy it, then send prizes from your own TON wallet.</div>`;
   box.innerHTML=html;
-  // make wallets copyable (only the player list, which is the 2nd .lb block)
+
+  // copyable wallets (player list is the last .lb block)
   const lists = box.querySelectorAll(".lb");
   const playerList = lists[lists.length-1];
   playerList?.querySelectorAll(".lb-row").forEach((row,i)=>{
     const p=res.players[i];
     row.onclick=()=>{ if(p?.ton_wallet){ navigator.clipboard?.writeText(p.ton_wallet); toast("Wallet copied"); } };
   });
+
+  // load the season preview into its slot
+  loadSeasonPreview();
+}
+
+/* ---- Season control: preview + reset ---- */
+async function loadSeasonPreview(){
+  const el=$("#seasonPanel"); if(!el) return;
+  const res=await api("endseason",{ action:"preview" });
+  if(res.error){ el.innerHTML=`<p style="font-size:12px;color:var(--muted)">${res.error}</p>`; return; }
+
+  const ends = res.endsAt ? new Date(res.endsAt).toLocaleString() : "not set";
+  let rows = (res.winners||[]).map(w=>{
+    const name = w.username ? "@"+w.username : (w.first_name || "Eagle");
+    const wallet = w.ton_wallet
+      ? `<small style="color:var(--ok)">has wallet ✓</small>`
+      : `<small style="color:#e07a7a">NO WALLET ✗</small>`;
+    return `<div class="lb-row">
+      <div class="lb-rank ${w.rank<=3?'g'+w.rank:''}">${w.rank}</div>
+      <div class="lb-name">${name} ${wallet}</div>
+      <div class="lb-score">${fmt0(w.balance)} · ${w.prize_ton} TON</div>
+    </div>`;
+  }).join("");
+  if(!rows) rows=`<div class="lb-row"><div class="lb-name">No players yet</div></div>`;
+
+  el.innerHTML=`
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
+      Current <b>Season ${res.seasonNumber}</b> · timer ends: ${ends}
+    </p>
+    <div class="lb" style="margin-bottom:12px">${rows}</div>
+    <p style="font-size:11px;color:#e07a7a;line-height:1.5;margin-bottom:10px">
+      ⚠️ Ending the season freezes these top 6 as winners, then resets <b>every</b> user's
+      balance and miners to 0. Pickaxes and referrals are kept. This cannot be undone.
+    </p>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted)">Next season length:</label>
+      <input id="seasonDays" type="number" min="1" value="7"
+        style="width:60px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px;font-size:13px">
+      <span style="font-size:12px;color:var(--muted)">days</span>
+    </div>
+    <label style="font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <input id="seasonPost" type="checkbox" checked> Post winners to Telegram channel
+    </label>
+    <button class="btn" id="endSeasonBtn" style="background:linear-gradient(90deg,#e07a7a,#c94f4f);color:#fff">
+      End Season ${res.seasonNumber} &amp; start next
+    </button>
+    <div id="endSeasonConfirm"></div>`;
+
+  $("#endSeasonBtn").onclick=()=>{
+    const c=$("#endSeasonConfirm");
+    c.innerHTML=`
+      <div style="margin-top:10px;padding:12px;border:1px solid #e07a7a;border-radius:10px">
+        <p style="font-size:12px;color:var(--ink);margin-bottom:10px">
+          Are you sure? This wipes all balances. Type <b>RESET</b> to confirm:
+        </p>
+        <input id="resetWord" placeholder="RESET"
+          style="width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px;font-size:13px;margin-bottom:10px">
+        <button class="btn" id="reallyEndBtn" style="background:linear-gradient(90deg,#e07a7a,#c94f4f);color:#fff">
+          Confirm — end season now
+        </button>
+      </div>`;
+    $("#reallyEndBtn").onclick=endSeason;
+  };
+}
+
+async function endSeason(){
+  if($("#resetWord")?.value.trim().toUpperCase() !== "RESET"){ toast('Type RESET to confirm'); return; }
+  const days = Number($("#seasonDays")?.value) || 7;
+  const post = $("#seasonPost")?.checked || false;
+  const btn=$("#reallyEndBtn"); if(btn){ btn.disabled=true; btn.textContent="Ending season…"; }
+
+  const res=await api("endseason",{ action:"confirm", newDurationDays:days, postToChannel:post });
+  if(res.error){ toast(res.error); if(btn){ btn.disabled=false; btn.textContent="Confirm — end season now"; } return; }
+
+  // show frozen winners with copyable wallets
+  const rows=(res.winners||[]).map(w=>{
+    const name=w.username?"@"+w.username:(w.first_name||"Eagle");
+    const wallet=w.ton_wallet
+      ? `<small style="color:var(--ok);cursor:pointer" data-w="${w.ton_wallet}">${w.ton_wallet.slice(0,10)}…${w.ton_wallet.slice(-4)} (tap to copy)</small>`
+      : `<small style="color:#e07a7a">NO WALLET — cannot pay</small>`;
+    return `<div class="lb-row">
+      <div class="lb-rank ${w.rank<=3?'g'+w.rank:''}">${w.rank}</div>
+      <div class="lb-name">${name}<br>${wallet}</div>
+      <div class="lb-score">${w.prize_ton} TON</div>
+    </div>`;
+  }).join("");
+
+  const chMsg = res.channel?.posted ? "✓ Posted to channel"
+    : (res.channel?.reason && res.channel.reason!=="not requested"
+        ? "Channel post failed: "+res.channel.reason : "");
+
+  $("#adminBody").innerHTML=`
+    <div class="mine-card" style="text-align:left;border-color:var(--gold)">
+      <b style="font-size:16px">✅ Season ${res.endedSeason} ended</b>
+      <p style="font-size:12px;color:var(--muted);margin:8px 0">
+        Season ${res.newSeason} started. All balances reset to 0.
+        ${chMsg?`<br>${chMsg}`:""}
+      </p>
+      <div class="section-title" style="margin-top:12px">Winners to pay</div>
+      <div class="lb">${rows||'<div class="lb-row"><div class="lb-name">No winners</div></div>'}</div>
+      <div class="disclaimer">Send each prize from your own TON wallet. Tap a wallet to copy it.</div>
+      <button class="btn sec" style="margin-top:10px" onclick="loadAdmin()">Back to admin</button>
+    </div>`;
+
+  $("#adminBody").querySelectorAll("[data-w]").forEach(s=>{
+    s.onclick=()=>{ navigator.clipboard?.writeText(s.dataset.w); toast("Wallet copied"); };
+  });
+  toast("Season ended!");
 }
 
 /* ---- Orb art reflects the owned pickaxe ---- */
