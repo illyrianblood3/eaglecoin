@@ -668,11 +668,12 @@ async function buyPickaxe(tier, duration){
 
 /* ---- Rewarded ads (Monetag) — 3 tiers ---- */
 const AD_TIERS = [
-  { tier:1, ads:1, reward:20,  label:"Watch 1 ad" },
-  { tier:2, ads:2, reward:50,  label:"Watch 2 ads" },
-  { tier:3, ads:3, reward:100, label:"Watch 3 ads" },
+  { tier:1, ads:1, reward:15,  cooldownH:2, label:"Watch 1 ad" },
+  { tier:2, ads:2, reward:40,  cooldownH:2, label:"Watch 2 ads" },
+  { tier:3, ads:3, reward:100, cooldownH:2, label:"Watch 3 ads" },
+  { tier:4, ads:1, reward:200, cooldownH:6, label:"Watch 1 long ad" },
 ];
-const adNextAt = { 1:0, 2:0, 3:0 };  // cooldown end times (ms)
+const adNextAt = { 1:0, 2:0, 3:0, 4:0 };  // cooldown end times (ms)
 
 function renderAdTiers(){
   const el=$("#adTierList"); if(!el) return;
@@ -815,10 +816,11 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
     }catch(e){}
   }, 60000);
   // restore ad cooldowns from saved timestamps
-  const COOLDOWN=3*3600*1000;
-  if(player.ad_tier1_at) adNextAt[1]=new Date(player.ad_tier1_at).getTime()+COOLDOWN;
-  if(player.ad_tier2_at) adNextAt[2]=new Date(player.ad_tier2_at).getTime()+COOLDOWN;
-  if(player.ad_tier3_at) adNextAt[3]=new Date(player.ad_tier3_at).getTime()+COOLDOWN;
+ const AD_CD = { 1:2, 2:2, 3:2, 4:6 };  // hours per tier, must match server
+  if(player.ad_tier1_at) adNextAt[1]=new Date(player.ad_tier1_at).getTime()+AD_CD[1]*3600*1000;
+  if(player.ad_tier2_at) adNextAt[2]=new Date(player.ad_tier2_at).getTime()+AD_CD[2]*3600*1000;
+  if(player.ad_tier3_at) adNextAt[3]=new Date(player.ad_tier3_at).getTime()+AD_CD[3]*3600*1000;
+  if(player.ad_tier4_at) adNextAt[4]=new Date(player.ad_tier4_at).getTime()+AD_CD[4]*3600*1000;
   if(typeof res.totalUsers==="number"){
     $("#userCount").textContent = `👥 ${fmt0(res.totalUsers)} eagles`;
   }
