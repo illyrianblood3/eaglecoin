@@ -491,6 +491,10 @@ async function loadSeasonPreview(){
       </select>
       <button class="btn sec" id="applyThemeBtn" style="width:auto;padding:8px 14px;font-size:13px">Apply</button>
     </div>
+    <div style="margin-bottom:12px">
+      <button class="btn sec" id="notifyBtn" style="font-size:13px">📣 Notify all players — new season</button>
+      <div id="notifyResult" style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center"></div>
+    </div>
     <p style="font-size:11px;color:#e07a7a;line-height:1.5;margin-bottom:10px">
       ⚠️ Ending the season freezes these top 6 as winners, then resets <b>every</b> user's
       balance and miners to 0. Pickaxes and referrals are kept. This cannot be undone.
@@ -515,6 +519,16 @@ async function loadSeasonPreview(){
     applyTheme(chosen);
     const rr = await api("endseason",{ action:"settheme", theme: chosen });
     if(rr.error){ toast(rr.error); } else { toast("Theme applied to everyone!"); }
+  });
+  $("#notifyBtn")?.addEventListener("click", async ()=>{
+    const btn = $("#notifyBtn");
+    if(!confirm("Send a DM to EVERY player announcing the new season?")) return;
+    btn.disabled = true; btn.textContent = "Sending to all players…";
+    const r = await api("broadcast", { kind: "season_start" });
+    if(r.error){ toast(r.error); btn.disabled=false; btn.textContent="📣 Notify all players — new season"; return; }
+    $("#notifyResult").textContent = `Sent to ${r.sent}/${r.total} players` + (r.failed ? ` (${r.failed} failed)` : "");
+    btn.textContent = "✓ Notification sent";
+    toast(`Notified ${r.sent} players!`);
   });
   $("#endSeasonBtn").onclick=()=>{
     const c=$("#endSeasonConfirm");
