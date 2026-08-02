@@ -14,7 +14,7 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--bg);color:var(--ink);min-height:100vh;overscroll-behavior:none}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;overscroll-behavior:none;transition:background .4s}
   .wrap{max-width:520px;margin:0 auto;padding:16px 16px 90px}
   .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
   .brand{display:flex;align-items:center;gap:10px}
@@ -69,7 +69,6 @@
   .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);color:var(--ink);padding:10px 18px;border-radius:20px;font-size:13px;z-index:60;opacity:0;transition:opacity .3s}
   .toast.show{opacity:1}
   .loading{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:100;color:var(--muted);font-size:14px;text-align:center;padding:24px}
-
   /* ---- pickaxe tiers ---- */
   .pick-card{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;
     background:var(--panel);position:relative;overflow:hidden}
@@ -102,7 +101,6 @@
     <div class="brand"><div class="crest">🦅</div><div><h1>Eagle Coin</h1><span id="userCount">Shqipëria</span></div></div>
     <div id="tonbtn"></div>
   </div>
-
   <div class="view active" id="view-mine">
     <div class="balance">
       <div class="lbl">Your Balance</div>
@@ -128,13 +126,11 @@
       </div>
     </div>
   </div>
-
   <div class="view" id="view-workers">
     <div class="section-title">Miners (spend EAGLE)</div>
     <div class="workers" id="workerList"></div>
     <div class="disclaimer">Miners boost how many EAGLE you earn per second. Bought with in-game EAGLE.</div>
   </div>
-
   <div class="view" id="view-lb">
     <div class="section-title">Top 6 eagles</div>
     <div class="lb" id="lbList"></div>
@@ -153,24 +149,20 @@
     </div>
     <div class="disclaimer">Connect your TON wallet (top right) so you can receive a prize if you finish in the top 6.</div>
   </div>
-
   <div class="view" id="view-admin">
     <div class="section-title">Admin panel</div>
     <div id="adminBody"><div class="mine-card">Loading…</div></div>
   </div>
-
   <div class="view" id="view-shop">
     <div class="section-title">Pickaxe upgrades</div>
     <div id="pickList"></div>
     <div class="disclaimer">Upgrades boost your mining rate and session length. Paid with Telegram Stars.</div>
   </div>
-
   <div class="view" id="view-earn">
     <div class="section-title">Watch ads, earn EAGLE</div>
     <div class="workers" id="adTierList"></div>
-    <div class="disclaimer">Watch short ads to earn free EAGLE. Each reward can be claimed once every 3 hours.</div>
+    <div class="disclaimer">Watch short ads to earn free EAGLE. Each reward can be claimed on its own cooldown.</div>
   </div>
-
   <div class="view" id="view-friends">
     <div class="section-title">Invite friends</div>
     <div class="balance" style="margin-bottom:14px">
@@ -189,7 +181,6 @@
     </div>
   </div>
 </div>
-
 <div class="nav">
   <button class="active" data-v="mine"><span class="ni">⛏️</span>Mine</button>
   <button data-v="workers"><span class="ni">👷</span>Miners</button>
@@ -200,15 +191,13 @@
   <button data-v="admin" id="adminNav" style="display:none"><span class="ni">🛠️</span>Admin</button>
 </div>
 <div class="toast" id="toast"></div>
-
 <script>
-/* ====== CONFIG — replace YOUR_PROJECT with your Supabase project ref ====== */
+/* ====== CONFIG ====== */
 const FN = "https://sxhfamzlijxfamcvmmcc.supabase.co/functions/v1";
-const BOT_USERNAME = "eaglecoin_bot";  // your bot's @username, no @
-/* ========================================================================= */
-
-const BASE_RATE = 0.0005;            // must match server
-let SESSION_SECONDS = 6 * 3600;   // updated from server per pickaxe tier
+const BOT_USERNAME = "eaglecoin_bot";
+/* ==================== */
+const BASE_RATE = 0.0005;
+let SESSION_SECONDS = 6 * 3600;
 const BOOST = { drone:1, engineer:3, rig:8, hangar:25 };
 const WORKER_META = [
   { id:"drone",    name:"Recon Drone", icon:"🛩️", boost:1,  baseCost:25 },
@@ -216,23 +205,45 @@ const WORKER_META = [
   { id:"rig",      name:"Mining Rig",  icon:"🖥️", boost:8,  baseCost:400 },
   { id:"hangar",   name:"Eagle Hangar",icon:"🏔️", boost:25, baseCost:1500 },
 ];
-
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData || "";
 const startParam = tg?.initDataUnsafe?.start_param || "";
 if (tg){ tg.ready(); tg.expand(); }
-
 const $ = s => document.querySelector(s);
+
+/* ---- Themes (10) ---- */
+const THEMES = {
+  classic:  { name:"Classic Gold",     bg:"#0b1220", panel:"#111c31", panel2:"#0e1728", line:"#20304d", gold:"#e9b949", gold2:"#f7d271", ok:"#3fb27f" },
+  red:      { name:"Albanian Red",     bg:"#1a0808", panel:"#2a1010", panel2:"#1f0a0a", line:"#4d2020", gold:"#e9b949", gold2:"#f7d271", ok:"#3fb27f" },
+  ice:      { name:"Ice Blue",         bg:"#08131f", panel:"#0f2438", panel2:"#0a1a2a", line:"#1e4d6b", gold:"#49c5e9", gold2:"#91e0f7", ok:"#3fb27f" },
+  emerald:  { name:"Emerald",          bg:"#08150e", panel:"#102a1a", panel2:"#0a1f13", line:"#20603a", gold:"#3fb27f", gold2:"#7fe0b0", ok:"#7fe0b0" },
+  purple:   { name:"Royal Purple",     bg:"#12081f", panel:"#221035", panel2:"#180a2c", line:"#3a2a55", gold:"#b98cff", gold2:"#d5b5ff", ok:"#3fb27f" },
+  sunset:   { name:"Sunset Orange",    bg:"#1a0f05", panel:"#2a1a0d", panel2:"#1f1208", line:"#6b4a20", gold:"#ff8c42", gold2:"#ffb27a", ok:"#3fb27f" },
+  rose:     { name:"Rose Pink",        bg:"#1f0814", panel:"#2f1020", panel2:"#250a18", line:"#6b2045", gold:"#ff5c9d", gold2:"#ff91c0", ok:"#3fb27f" },
+  teal:     { name:"Teal Cyan",        bg:"#051a1a", panel:"#0d2a2a", panel2:"#081f1f", line:"#206060", gold:"#2ee0d0", gold2:"#7ff0e5", ok:"#7ff0e5" },
+  silver:   { name:"Midnight Silver",  bg:"#0d0d12", panel:"#191922", panel2:"#12121a", line:"#2a2a3a", gold:"#c0c8d8", gold2:"#e5eaf2", ok:"#3fb27f" },
+  lime:     { name:"Neon Lime",        bg:"#1a1405", panel:"#2a230d", panel2:"#1f1a08", line:"#6b5a20", gold:"#c5f520", gold2:"#e0ff7a", ok:"#7fe0b0" },
+};
+function applyTheme(key){
+  const t = THEMES[key] || THEMES.classic;
+  const r = document.documentElement.style;
+  r.setProperty("--bg", t.bg);
+  r.setProperty("--panel", t.panel);
+  r.setProperty("--panel-2", t.panel2);
+  r.setProperty("--line", t.line);
+  r.setProperty("--gold", t.gold);
+  r.setProperty("--gold-2", t.gold2);
+  r.setProperty("--ok", t.ok);
+}
+
 const fmt6 = n => Number(n).toLocaleString("en-US",{minimumFractionDigits:6,maximumFractionDigits:6});
 const fmt0 = n => Math.floor(Number(n)).toLocaleString("en-US");
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);if(tg?.HapticFeedback)tg.HapticFeedback.impactOccurred("light");}
-
 let player = null;
 let tiers = [];
-let mineStart = 0;     // ms timestamp when the current session started (0 = not mining)
+let mineStart = 0;
 let liveTimer = null;
 let checkinNextAt = 0, cdTimer = null;
-
 async function api(path, body){
   const r = await fetch(`${FN}/${path}`, {
     method:"POST", headers:{ "content-type":"application/json" },
@@ -240,7 +251,6 @@ async function api(path, body){
   });
   return r.json();
 }
-
 function multiplier(w){ let m=1; for(const k in BOOST) m += (Number(w[k])||0)*BOOST[k]; return m; }
 function tierMult(){
   const t = tiers.find(x=>x.id === (player.pickaxe||"regular"));
@@ -248,9 +258,7 @@ function tierMult(){
 }
 function ratePerSec(){ return BASE_RATE * multiplier(player.workers) * tierMult(); }
 function totalWorkers(){ return Object.values(player.workers).reduce((a,b)=>a+Number(b),0); }
-
 function bonusForDay(day){ return Math.round(5 * Math.pow(1.5, day-1)); }
-
 function render(){
   $("#bal").textContent = fmt6(player.balance);
   $("#rate").textContent = fmt6(ratePerSec());
@@ -261,7 +269,6 @@ function render(){
   $("#refCount").textContent = fmt0(player.referral_count || 0);
   renderWorkers(); renderLeaderboard(); renderAdTiers(); renderShop(); renderOrbArt();
 }
-
 function renderWorkers(){
   const el=$("#workerList"); el.innerHTML="";
   for(const w of WORKER_META){
@@ -277,12 +284,10 @@ function renderWorkers(){
   }
   el.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>buy(b.dataset.buy));
 }
-
 let lbCache = [];
 function renderLeaderboard(){
   const el=$("#lbList"); el.innerHTML="";
   const myId = player.tg_id ?? tg?.initDataUnsafe?.user?.id;
-  // dedupe by tg_id (usernames can be null, which caused duplicate rows)
   const seen = new Set();
   const rows = [];
   for(const r of lbCache){
@@ -305,8 +310,7 @@ function renderLeaderboard(){
     el.appendChild(row);
   });
 }
-
-/* ---- Mining: tap once, auto-mines 24h, auto-banks, then Start returns ---- */
+/* ---- Mining ---- */
 let claiming=false;
 function enterMiningUI(){
   $("#orb").classList.add("live");
@@ -348,24 +352,21 @@ function updateMiningTick(){
   const leftSec=Math.max(0,SESSION_SECONDS-secs);
   const h=Math.floor(leftSec/3600), m=Math.floor(leftSec%3600/60), s=Math.floor(leftSec%60);
   if(secs>=SESSION_SECONDS){
-    // 24h complete — bank it automatically and reset to Start
     $("#progLeft").textContent="Session complete";
     autoClaim();
   } else {
     $("#progLeft").textContent=`${h}h ${m}m ${s}s of mining left`;
   }
 }
-
 $("#mineBtn").onclick = async ()=>{
-  if(mineStart) return; // already mining, button is disabled anyway
+  if(mineStart) return;
   const res = await api("mine",{action:"start"});
   if(res.error){ toast(res.error); return; }
   if(res.sessionSeconds) SESSION_SECONDS=res.sessionSeconds;
   mineStart=res.startedAt; enterMiningUI();
   toast("Mining started!");
 };
-
-/* ---- Daily bonus countdown ---- */
+/* ---- Daily bonus ---- */
 function startCountdown(){
   clearInterval(cdTimer);
   const tick=()=>{
@@ -384,7 +385,6 @@ function startCountdown(){
   };
   tick(); cdTimer=setInterval(tick,1000);
 }
-
 $("#checkinBtn").onclick=async ()=>{
   const res=await api("checkin",{});
   if(res.locked){ checkinNextAt=res.nextAt; player=res.player; render(); startCountdown(); return; }
@@ -393,20 +393,12 @@ $("#checkinBtn").onclick=async ()=>{
   toast(`Daily bonus +${res.bonus} EAGLE!`);
   render(); startCountdown();
 };
-
 async function buy(id){
   const res=await api("buy",{workerId:id});
   if(res.error){ toast(res.error); return; }
   player=res.player; toast("Miner bought!"); render();
-  // if mining, the live rate updates automatically on next tick
 }
-
 /* ---- Admin panel ---- */
-/* ====================================================================
-   EDIT 1 — replace your existing loadAdmin() with everything below,
-   down to (and including) the loadSeasonPreview / endSeason helpers.
-   ==================================================================== */
-
 async function loadAdmin(){
   const box=$("#adminBody");
   const res=await api("adminstats",{});
@@ -425,14 +417,12 @@ async function loadAdmin(){
   }
   const s=res.stats;
   let html=`
-  <!-- SEASON CONTROL -->
   <div class="mine-card" style="text-align:left;border-color:var(--gold)">
     <b style="font-size:15px">🏆 Season control</b>
     <div id="seasonPanel" style="margin-top:10px">
       <p style="font-size:12px;color:var(--muted)">Loading current standings…</p>
     </div>
   </div>
-
   <div class="lb" style="margin-bottom:14px">
     <div class="lb-row"><div class="lb-name">Total users</div><div class="lb-score">${fmt0(s.totalUsers)}</div></div>
     <div class="lb-row"><div class="lb-name">New today</div><div class="lb-score">${fmt0(s.newToday)}</div></div>
@@ -454,25 +444,19 @@ async function loadAdmin(){
   });
   html+=`</div><div class="disclaimer">Tap a wallet to copy it, then send prizes from your own TON wallet.</div>`;
   box.innerHTML=html;
-
-  // copyable wallets (player list is the last .lb block)
   const lists = box.querySelectorAll(".lb");
   const playerList = lists[lists.length-1];
   playerList?.querySelectorAll(".lb-row").forEach((row,i)=>{
     const p=res.players[i];
     row.onclick=()=>{ if(p?.ton_wallet){ navigator.clipboard?.writeText(p.ton_wallet); toast("Wallet copied"); } };
   });
-
-  // load the season preview into its slot
   loadSeasonPreview();
 }
-
-/* ---- Season control: preview + reset ---- */
+/* ---- Season control: preview + reset + theme ---- */
 async function loadSeasonPreview(){
   const el=$("#seasonPanel"); if(!el) return;
   const res=await api("endseason",{ action:"preview" });
   if(res.error){ el.innerHTML=`<p style="font-size:12px;color:var(--muted)">${res.error}</p>`; return; }
-
   const ends = res.endsAt ? new Date(res.endsAt).toLocaleString() : "not set";
   let rows = (res.winners||[]).map(w=>{
     const name = w.username ? "@"+w.username : (w.first_name || "Eagle");
@@ -486,12 +470,27 @@ async function loadSeasonPreview(){
     </div>`;
   }).join("");
   if(!rows) rows=`<div class="lb-row"><div class="lb-name">No players yet</div></div>`;
-
   el.innerHTML=`
     <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
       Current <b>Season ${res.seasonNumber}</b> · timer ends: ${ends}
     </p>
     <div class="lb" style="margin-bottom:12px">${rows}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Theme:</label>
+      <select id="themePick" style="flex:1;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px;font-size:13px">
+        <option value="classic">Classic Gold</option>
+        <option value="red">Albanian Red</option>
+        <option value="ice">Ice Blue</option>
+        <option value="emerald">Emerald</option>
+        <option value="purple">Royal Purple</option>
+        <option value="sunset">Sunset Orange</option>
+        <option value="rose">Rose Pink</option>
+        <option value="teal">Teal Cyan</option>
+        <option value="silver">Midnight Silver</option>
+        <option value="lime">Neon Lime</option>
+      </select>
+      <button class="btn sec" id="applyThemeBtn" style="width:auto;padding:8px 14px;font-size:13px">Apply</button>
+    </div>
     <p style="font-size:11px;color:#e07a7a;line-height:1.5;margin-bottom:10px">
       ⚠️ Ending the season freezes these top 6 as winners, then resets <b>every</b> user's
       balance and miners to 0. Pickaxes and referrals are kept. This cannot be undone.
@@ -509,7 +508,14 @@ async function loadSeasonPreview(){
       End Season ${res.seasonNumber} &amp; start next
     </button>
     <div id="endSeasonConfirm"></div>`;
-
+  const tp = $("#themePick");
+  if(tp && res.seasonTheme) tp.value = res.seasonTheme;
+  $("#applyThemeBtn")?.addEventListener("click", async ()=>{
+    const chosen = $("#themePick").value;
+    applyTheme(chosen);
+    const rr = await api("endseason",{ action:"settheme", theme: chosen });
+    if(rr.error){ toast(rr.error); } else { toast("Theme applied to everyone!"); }
+  });
   $("#endSeasonBtn").onclick=()=>{
     const c=$("#endSeasonConfirm");
     c.innerHTML=`
@@ -526,17 +532,13 @@ async function loadSeasonPreview(){
     $("#reallyEndBtn").onclick=endSeason;
   };
 }
-
 async function endSeason(){
   if($("#resetWord")?.value.trim().toUpperCase() !== "RESET"){ toast('Type RESET to confirm'); return; }
   const days = Number($("#seasonDays")?.value) || 7;
   const post = $("#seasonPost")?.checked || false;
   const btn=$("#reallyEndBtn"); if(btn){ btn.disabled=true; btn.textContent="Ending season…"; }
-
   const res=await api("endseason",{ action:"confirm", newDurationDays:days, postToChannel:post });
   if(res.error){ toast(res.error); if(btn){ btn.disabled=false; btn.textContent="Confirm — end season now"; } return; }
-
-  // show frozen winners with copyable wallets
   const rows=(res.winners||[]).map(w=>{
     const name=w.username?"@"+w.username:(w.first_name||"Eagle");
     const wallet=w.ton_wallet
@@ -548,11 +550,9 @@ async function endSeason(){
       <div class="lb-score">${w.prize_ton} TON</div>
     </div>`;
   }).join("");
-
   const chMsg = res.channel?.posted ? "✓ Posted to channel"
     : (res.channel?.reason && res.channel.reason!=="not requested"
         ? "Channel post failed: "+res.channel.reason : "");
-
   $("#adminBody").innerHTML=`
     <div class="mine-card" style="text-align:left;border-color:var(--gold)">
       <b style="font-size:16px">✅ Season ${res.endedSeason} ended</b>
@@ -565,14 +565,12 @@ async function endSeason(){
       <div class="disclaimer">Send each prize from your own TON wallet. Tap a wallet to copy it.</div>
       <button class="btn sec" style="margin-top:10px" onclick="loadAdmin()">Back to admin</button>
     </div>`;
-
   $("#adminBody").querySelectorAll("[data-w]").forEach(s=>{
     s.onclick=()=>{ navigator.clipboard?.writeText(s.dataset.w); toast("Wallet copied"); };
   });
   toast("Season ended!");
 }
-
-/* ---- Orb art reflects the owned pickaxe ---- */
+/* ---- Orb art ---- */
 function renderOrbArt(){
   const el=$("#orbArt"); if(!el) return;
   const tier = player.pickaxe || "regular";
@@ -582,8 +580,6 @@ function renderOrbArt(){
   const orb=$("#orb");
   if(orb && !orb.classList.contains("live")) orb.style.borderColor = glow;
 }
-
-/* ---- Pickaxe SVG art per tier ---- */
 function pickaxeSVG(tier, size){
   size = size || 56;
   const PAL = {
@@ -612,7 +608,6 @@ function pickaxeSVG(tier, size){
     </g>
   </svg>`;
 }
-
 /* ---- Pickaxe shop ---- */
 function renderShop(){
   const el=$("#pickList"); if(!el) return;
@@ -649,7 +644,6 @@ function renderShop(){
   }
   el.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>buyPickaxe(b.dataset.tier,b.dataset.dur));
 }
-
 async function buyPickaxe(tier, duration){
   toast("Opening payment…");
   const res = await api("buystars",{ tier, duration });
@@ -665,16 +659,14 @@ async function buyPickaxe(tier, duration){
     window.open(res.link, "_blank");
   }
 }
-
-/* ---- Rewarded ads (Monetag) — 3 tiers ---- */
+/* ---- Rewarded ads (Monetag) — 4 tiers ---- */
 const AD_TIERS = [
   { tier:1, ads:1, reward:15,  cooldownH:2, label:"Watch 1 ad" },
   { tier:2, ads:2, reward:40,  cooldownH:2, label:"Watch 2 ads" },
   { tier:3, ads:3, reward:100, cooldownH:2, label:"Watch 3 ads" },
   { tier:4, ads:1, reward:200, cooldownH:6, label:"Watch 1 long ad" },
 ];
-const adNextAt = { 1:0, 2:0, 3:0, 4:0 };  // cooldown end times (ms)
-
+const adNextAt = { 1:0, 2:0, 3:0, 4:0 };
 function renderAdTiers(){
   const el=$("#adTierList"); if(!el) return;
   el.innerHTML="";
@@ -696,21 +688,17 @@ function renderAdTiers(){
   }
   el.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>watchTier(Number(b.dataset.tier)));
 }
-
 async function watchTier(tier){
   const meta=AD_TIERS.find(x=>x.tier===tier);
   if(!meta) return;
   if(adNextAt[tier] > Date.now()){ toast("Still on cooldown"); return; }
   if(typeof window.show_11373624 !== "function"){ toast("Ads not ready yet"); return; }
-
   const btn=document.querySelector(`[data-tier="${tier}"]`);
   try{
-    // play the required number of ads in sequence
     for(let i=0;i<meta.ads;i++){
       if(btn){ btn.disabled=true; btn.textContent = meta.ads>1 ? `Ad ${i+1}/${meta.ads}…` : "Loading…"; }
       await window.show_11373624();
     }
-    // all ads watched — claim server-side
     if(btn) btn.textContent="Claiming…";
     const res=await api("adreward",{ tier });
     if(res.error){
@@ -727,11 +715,8 @@ async function watchTier(tier){
   }
   renderAdTiers();
 }
-
-// tick the cooldown labels every second while on the Earn tab
 setInterval(()=>{ if($("#view-earn")?.classList.contains("active")) renderAdTiers(); }, 1000);
-
-/* ---- Referral invite link ---- */
+/* ---- Referral ---- */
 function inviteLink(){
   const myId = player ? (tg?.initDataUnsafe?.user?.id) : null;
   return `https://t.me/${BOT_USERNAME}/eagles?startapp=ref_${myId}`;
@@ -748,8 +733,7 @@ $("#copyBtn").onclick = async ()=>{
   try{ await navigator.clipboard.writeText(link); toast("Link copied!"); }
   catch(e){ toast(link); }
 };
-
-/* ---- TON Connect — save address so winners can be paid ---- */
+/* ---- TON Connect ---- */
 try{
   const tc = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl:"https://illyrianblood3.github.io/eaglecoin/tonconnect-manifest.json",
@@ -759,7 +743,6 @@ try{
     if(addr){ try{ await api("savewallet",{ wallet: addr }); toast("Wallet connected"); }catch(e){} }
   });
 }catch(e){}
-
 /* ---- Season prize countdown ---- */
 let seasonEndsAt = 0, seasonTimer = null;
 function startSeasonCountdown(){
@@ -777,7 +760,6 @@ function startSeasonCountdown(){
   };
   tick(); seasonTimer=setInterval(tick,1000);
 }
-
 /* ---- Nav ---- */
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
@@ -785,8 +767,7 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
   b.classList.add("active"); $("#view-"+b.dataset.v).classList.add("active");
   if(b.dataset.v==="admin") loadAdmin();
 });
-
-/* reveal the Admin tab: long-press (or 5 quick taps) on the eagle logo */
+/* reveal Admin: 5 taps on the logo */
 (function(){
   const crest=document.querySelector(".crest"); if(!crest) return;
   let taps=0, timer=null;
@@ -796,14 +777,13 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
     if(taps>=5){ taps=0; $("#adminNav").style.display="flex"; toast("Admin unlocked"); }
   };
 })();
-
 /* ---- Boot ---- */
 (async ()=>{
   if(!initData){ $("#loading").textContent="Open this inside Telegram to play."; return; }
   const res=await api("verify",{startParam});
   if(res.error){ $("#loading").textContent="Sign-in failed: "+res.error; return; }
   player=res.player; lbCache=res.leaderboard||[]; tiers=res.tiers||[];
-  // refresh leaderboard + player state every 60s so ranks stay live
+  if(res.seasonTheme) applyTheme(res.seasonTheme);
   setInterval(async ()=>{
     try{
       const r = await api("verify",{});
@@ -811,12 +791,12 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
         lbCache = r.leaderboard || lbCache;
         if(r.player) player = r.player;
         if(r.tiers?.length) tiers = r.tiers;
+        if(r.seasonTheme) applyTheme(r.seasonTheme);
         renderLeaderboard();
       }
     }catch(e){}
   }, 60000);
-  // restore ad cooldowns from saved timestamps
- const AD_CD = { 1:2, 2:2, 3:2, 4:6 };  // hours per tier, must match server
+  const AD_CD = { 1:2, 2:2, 3:2, 4:6 };
   if(player.ad_tier1_at) adNextAt[1]=new Date(player.ad_tier1_at).getTime()+AD_CD[1]*3600*1000;
   if(player.ad_tier2_at) adNextAt[2]=new Date(player.ad_tier2_at).getTime()+AD_CD[2]*3600*1000;
   if(player.ad_tier3_at) adNextAt[3]=new Date(player.ad_tier3_at).getTime()+AD_CD[3]*3600*1000;
@@ -825,13 +805,9 @@ document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
     $("#userCount").textContent = `👥 ${fmt0(res.totalUsers)} eagles`;
   }
   if(res.seasonEndsAt){ seasonEndsAt = new Date(res.seasonEndsAt).getTime(); startSeasonCountdown(); }
-
-  // resume an in-progress mining session
   const st=await api("mine",{action:"status"});
   if(st.ok){ if(st.sessionSeconds) SESSION_SECONDS=st.sessionSeconds;
     if(st.mining && st.startedAt){ mineStart=st.startedAt; enterMiningUI(); } }
-
-  // daily bonus countdown
   if(player.last_checkin){
     const next=new Date(player.last_checkin).getTime()+24*3600*1000;
     if(next>Date.now()){ checkinNextAt=next; startCountdown(); }
